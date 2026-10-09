@@ -1,15 +1,15 @@
 {
-  "name": "sucursal-api",
+  "name": "banco-sucursal",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Nodo 2: servidor administrativo de sucursal del sistema bancario distribuido",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "dev": "node --watch server.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",
     "cors": "^2.8.6",
