@@ -1,86 +1,104 @@
-# Sucursal · Servidor administrativo (Nodo 2)
+# Nodo 2 · Servidor administrativo de sucursal
 
-Sistema en Express para los ejecutivos de una sucursal. No tiene base de datos:
-todas las operaciones se piden al Banco Central (Supabase) mediante funciones RPC,
-identificándose con el API Key de la sucursal.
+Sistema para los ejecutivos de una sucursal del **Sistema Bancario Distribuido**
+(Examen 2 Práctico): abre cuentas de clientes, consulta historiales y emite reportes.
 
-## Funcionalidades
+## Enlaces
 
-| Requisito del examen | Dónde está |
+| Nodo | Aplicación desplegada | Tecnología |
+|---|---|---|
+| 1 · Banco Central | https://examen2-tawd-nodo1.onrender.com | Laravel + Supabase |
+| **2 · Sucursal** | https://examen2-tawd-nodo2.onrender.com | Express |
+| 3 · Cajero automático | https://examen2-tawd-nodo3.onrender.com | Express |
+
+La aplicación está en el plan gratuito de Render: si lleva un rato sin uso, la primera
+carga tarda cerca de un minuto.
+
+## Arquitectura del nodo
+
+La sucursal no tiene base de datos. Cada operación se envía al Banco Central (Supabase)
+como una llamada a función, identificándose con el API Key de la sucursal.
+
+```mermaid
+flowchart LR
+    ejecutivo([Ejecutivo de sucursal])
+
+    subgraph nodo2 [Nodo 2 · Sucursal en Render]
+        ui["Interfaz web<br/>public/"]
+        api["API REST<br/>src/api.js"]
+        auth["Sesión del ejecutivo<br/>src/auth.js"]
+        rep["Reportes y CSV<br/>src/reportes.js"]
+        banco["Cliente del banco<br/>src/banco.js"]
+        key["API Key de la sucursal<br/>src/config.js"]
+        ui --> api
+        api --> auth
+        api --> rep
+        api --> banco
+        key --> banco
+    end
+
+    subgraph supabase [Supabase · Banco Central]
+        rpc["Funciones RPC<br/>valida el API Key"]
+        db[("PostgreSQL")]
+        rpc --> db
+    end
+
+    n1["Nodo 1 · Banco Central"]
+
+    ejecutivo --> ui
+    banco -- "supabase-js + API Key" --> rpc
+    n1 -. "genera el API Key<br/>de la sucursal" .-> key
+```
+
+| Función | Pantalla | Ruta del nodo | Función en el Banco Central |
+|---|---|---|---|
+| Crear cuentas de clientes | Cuentas | `POST /api/cuentas` | `crear_cuenta` |
+| Listar cuentas de la sucursal | Cuentas | `GET /api/cuentas` | `cuentas_de_sucursal` |
+| Historial local | Historial | `GET /api/historial` | `historial` |
+| Historial por usuario | Historial | `GET /api/historial?cuenta=` | `historial`, `consultar_saldo` |
+| Reportes (CSV y PDF) | Reportes | `GET /api/reportes` | `historial`, `cuentas_de_sucursal`, `nodo_info` |
+| Conexión por API Key | Configuración | `PUT /api/config/api-key` | `nodo_info` |
+
+### Cómo se conecta con el banco
+
+1. El administrador crea la sucursal en el nodo 1 y obtiene su API Key (`bk_suc_…`).
+2. El API Key se define en la variable `BANCO_API_KEY` o se captura en la pantalla
+   Configuración. El nodo lo verifica contra el banco y rechaza los que son de cajero.
+3. A partir de ahí, cada operación viaja con ese API Key. Si el banco desactiva la
+   sucursal, todas las operaciones se rechazan de inmediato.
+
+Una sucursal solo ve las cuentas que abrió ella y las operaciones hechas en ella.
+
+## OpenAPI
+
+[`openapi.yaml`](openapi.yaml) documenta las rutas de este servidor: sesión, cuentas,
+historial, reportes y configuración del API Key.
+
+Para verlo como documentación interactiva, abrir https://editor.swagger.io y pegar el
+contenido del archivo.
+
+## Despliegue
+
+Web Service de Node en Render, con despliegue automático en cada `git push` a `main`.
+
+| Paso | Valor |
 |---|---|
-| Crear cuentas en la base central | Cuentas > Nueva cuenta (`crear_cuenta`) |
-| Historial local | Historial, sin elegir usuario (`historial`) |
-| Historial por usuario | Historial eligiendo una cuenta, o "Ver movimientos" en la lista |
-| Reportes administrativos | Reportes: totales del periodo y por día; CSV e impresión/PDF |
-| Conexión por API Key | Configuración: se verifica contra el banco antes de guardarse |
+| Construcción | `npm install` |
+| Arranque | `npm start` |
 
-## Instalación
+Variables de entorno: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `BANCO_API_KEY`,
+`SUCURSAL_USUARIO`, `SUCURSAL_PASSWORD`, `SESSION_SECRET`.
+
+El pipeline completo y el flujo entre los tres nodos están explicados en el README del nodo 1.
+
+## Ejecución local
 
 Requiere Node 20 o superior.
 
 ```bash
 npm install
 cp .env.example .env
+npm start
 ```
 
-Editar `.env`:
-
-- `SUPABASE_URL` y `SUPABASE_ANON_KEY`: las mismas del Banco Central (clave anon, nunca service_role).
-- `SUCURSAL_USUARIO` y `SUCURSAL_PASSWORD`: acceso de los ejecutivos.
-- `SESSION_SECRET`: texto largo aleatorio.
-- `BANCO_API_KEY`: opcional; también se captura en la pantalla Configuración.
-
-```bash
-npm start        # o: npm run dev  (reinicia al guardar cambios)
-```
-
-Abrir http://localhost:3000, iniciar sesión y pegar en Configuración el API Key
-que muestra el panel del Banco Central al crear la sucursal.
-
-## API
-
-Todas las rutas (menos login) requieren la cookie de sesión.
-
-| Método | Ruta | Descripción |
-|---|---|---|
-| POST | `/api/login` | `{ usuario, password }` |
-| POST | `/api/logout` | Cierra la sesión |
-| GET | `/api/sucursal` | Datos de la sucursal y estado de la conexión |
-| PUT | `/api/config/api-key` | `{ api_key }` verifica y guarda el API Key |
-| GET | `/api/cuentas` | Cuentas abiertas en la sucursal |
-| POST | `/api/cuentas` | `{ nombre_titular, saldo_inicial }` crea una cuenta |
-| GET | `/api/cuentas/:numero` | Titular, saldo y estado de una cuenta |
-| GET | `/api/historial` | Local; con `?cuenta=` por usuario; `?desde=&hasta=` opcionales |
-| GET | `/api/historial.csv` | Lo mismo en CSV |
-| GET | `/api/reportes` | `?desde=&hasta=` (por defecto, el mes actual) |
-| GET | `/api/reportes.csv` | Lo mismo en CSV |
-| GET | `/salud` | Comprobación de vida, sin sesión |
-
-## Estructura
-
-| Archivo | Qué hace |
-|---|---|
-| `server.js` | Arranque |
-| `src/app.js` | Express: middlewares, archivos estáticos y manejo de errores |
-| `src/api.js` | Rutas de la API |
-| `src/banco.js` | Cliente de Supabase: llamadas RPC con el API Key y traducción de errores |
-| `src/config.js` | Lectura y guardado del API Key (`data/config.json` o `BANCO_API_KEY`) |
-| `src/auth.js` | Login de ejecutivos con cookie firmada |
-| `src/reportes.js` | Cálculo del reporte y generación de CSV |
-| `public/` | Interfaz (HTML, CSS y JavaScript sin frameworks) |
-
-## Despliegue en Coolify
-
-1. New Resource > repositorio de GitHub > Build Pack **Nixpacks**.
-2. Puerto expuesto: `3000`. Comando de inicio: `npm start` (lo detecta solo).
-3. Variables de entorno: las de `.env.example`, incluida `BANCO_API_KEY`.
-4. Con Auto Deploy activo, cada `git push` vuelve a desplegar.
-
-En Coolify conviene usar `BANCO_API_KEY` como variable de entorno: el archivo
-`data/config.json` se pierde en cada despliegue, salvo que se monte un volumen
-persistente en `/app/data`.
-
-## Límites conocidos
-
-- El historial y los reportes consideran los 1000 movimientos más recientes de la sucursal.
-- Hay un solo usuario de ejecutivo, definido en `.env`.
+Abrir http://localhost:3000.

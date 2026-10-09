@@ -1,0 +1,323 @@
+openapi: 3.0.3
+info:
+  title: Sucursal · Servidor administrativo (Nodo 2)
+  version: 1.0.0
+  description: |
+    API del servidor de sucursal (Express). Los ejecutivos inician sesión y el servidor
+    reenvía cada operación al Banco Central (Supabase) con el API Key de la sucursal.
+    La sucursal no tiene base de datos propia.
+servers:
+  - url: https://examen2-tawd-nodo2.onrender.com
+    description: Producción (Render)
+  - url: http://localhost:3000
+    description: Local
+tags:
+  - name: Sesión
+  - name: Sucursal
+  - name: Cuentas
+  - name: Historial
+  - name: Reportes
+security:
+  - Sesion: []
+paths:
+  /salud:
+    get:
+      summary: Comprobación de vida
+      security: []
+      responses:
+        '200':
+          description: El servidor responde
+          content:
+            application/json:
+              schema: { type: object, properties: { ok: { type: boolean } } }
+  /api/login:
+    post:
+      tags: [Sesión]
+      summary: Iniciar sesión como ejecutivo
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [usuario, password]
+              properties:
+                usuario: { type: string, example: ejecutivo }
+                password: { type: string, format: password }
+      responses:
+        '200':
+          description: Sesión iniciada; se envía la cookie `suc_sesion`
+          content:
+            application/json:
+              schema: { type: object, properties: { usuario: { type: string } } }
+        '401': { $ref: '#/components/responses/Error' }
+  /api/logout:
+    post:
+      tags: [Sesión]
+      summary: Cerrar sesión
+      security: []
+      responses:
+        '200': { description: Sesión cerrada }
+  /api/sucursal:
+    get:
+      tags: [Sucursal]
+      summary: Datos de la sucursal y estado de la conexión con el Banco Central
+      responses:
+        '200':
+          description: Estado de la sucursal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  usuario: { type: string }
+                  configurada: { type: boolean, description: false si aún no hay API Key }
+                  api_key: { type: string, description: Solo el prefijo, example: bk_suc_1a2b3… }
+                  nodo: { $ref: '#/components/schemas/Nodo' }
+                  error: { type: string, description: Presente si el banco rechazó el API Key }
+        '401': { $ref: '#/components/responses/Error' }
+  /api/config/api-key:
+    put:
+      tags: [Sucursal]
+      summary: Verificar y guardar el API Key de la sucursal
+      description: Se valida contra el Banco Central; se rechaza si pertenece a un cajero.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [api_key]
+              properties:
+                api_key: { type: string, example: bk_suc_1a2b3c... }
+      responses:
+        '200':
+          description: API Key guardado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  api_key: { type: string }
+                  nodo: { $ref: '#/components/schemas/Nodo' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '409':
+          description: El servidor no puede guardar archivos; usar la variable BANCO_API_KEY
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  /api/cuentas:
+    get:
+      tags: [Cuentas]
+      summary: Cuentas abiertas en esta sucursal
+      responses:
+        '200':
+          description: Lista de cuentas
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CuentaDetalle' }
+        '401': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Cuentas]
+      summary: Crear una cuenta de cliente en el Banco Central
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre_titular]
+              properties:
+                nombre_titular: { type: string, maxLength: 80, example: Juan Pérez }
+                saldo_inicial: { type: number, minimum: 0, default: 0, example: 1000 }
+      responses:
+        '201':
+          description: Cuenta creada
+          content: { application/json: { schema: { $ref: '#/components/schemas/Cuenta' } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+  /api/cuentas/{numero}:
+    get:
+      tags: [Cuentas]
+      summary: Titular, saldo y estado de una cuenta
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          schema: { type: string, example: '6976023998' }
+      responses:
+        '200':
+          description: Datos de la cuenta
+          content: { application/json: { schema: { $ref: '#/components/schemas/Cuenta' } } }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/historial:
+    get:
+      tags: [Historial]
+      summary: Historial local o por usuario
+      description: |
+        Sin `cuenta`: operaciones hechas en esta sucursal. Con `cuenta`: todos los movimientos
+        de ese usuario, en cualquier nodo.
+      parameters:
+        - $ref: '#/components/parameters/Cuenta'
+        - $ref: '#/components/parameters/Desde'
+        - $ref: '#/components/parameters/Hasta'
+      responses:
+        '200':
+          description: Transacciones
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cuenta: { type: string, nullable: true }
+                  filas:
+                    type: array
+                    items: { $ref: '#/components/schemas/Transaccion' }
+                  limite_alcanzado: { type: boolean, description: true si hay más de 1000 movimientos }
+                  titular: { $ref: '#/components/schemas/Cuenta' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/historial.csv:
+    get:
+      tags: [Historial]
+      summary: Historial en CSV
+      parameters:
+        - $ref: '#/components/parameters/Cuenta'
+        - $ref: '#/components/parameters/Desde'
+        - $ref: '#/components/parameters/Hasta'
+      responses:
+        '200':
+          description: Archivo CSV
+          content: { text/csv: { schema: { type: string } } }
+        '401': { $ref: '#/components/responses/Error' }
+  /api/reportes:
+    get:
+      tags: [Reportes]
+      summary: Reporte de operaciones de la sucursal
+      description: Por defecto, del día 1 del mes actual a hoy.
+      parameters:
+        - $ref: '#/components/parameters/Desde'
+        - $ref: '#/components/parameters/Hasta'
+      responses:
+        '200':
+          description: Reporte del periodo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  desde: { type: string, format: date }
+                  hasta: { type: string, format: date }
+                  generado: { type: string, format: date-time }
+                  sucursal: { $ref: '#/components/schemas/Nodo' }
+                  resumen: { $ref: '#/components/schemas/Totales' }
+                  por_dia:
+                    type: array
+                    items:
+                      allOf:
+                        - type: object
+                          properties: { dia: { type: string, format: date } }
+                        - $ref: '#/components/schemas/Totales'
+                  cuentas_abiertas: { type: integer }
+                  cuentas_totales: { type: integer }
+                  saldo_en_cuentas: { type: number }
+                  limite_alcanzado: { type: boolean }
+        '401': { $ref: '#/components/responses/Error' }
+  /api/reportes.csv:
+    get:
+      tags: [Reportes]
+      summary: Reporte en CSV
+      parameters:
+        - $ref: '#/components/parameters/Desde'
+        - $ref: '#/components/parameters/Hasta'
+      responses:
+        '200':
+          description: Archivo CSV
+          content: { text/csv: { schema: { type: string } } }
+        '401': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    Sesion:
+      type: apiKey
+      in: cookie
+      name: suc_sesion
+      description: Cookie firmada que entrega /api/login.
+  parameters:
+    Cuenta:
+      name: cuenta
+      in: query
+      schema: { type: string }
+      description: Número de cuenta del usuario
+    Desde:
+      name: desde
+      in: query
+      schema: { type: string, format: date }
+    Hasta:
+      name: hasta
+      in: query
+      schema: { type: string, format: date }
+      description: Inclusivo
+  responses:
+    Error:
+      description: |
+        Error. 400 datos inválidos, 401 sin sesión o API Key inválido, 403 sucursal inactiva,
+        404 cuenta inexistente, 409 sucursal sin API Key, 503 sin conexión con el Banco Central.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string, example: La cuenta no existe. }
+        codigo: { type: string, example: CUENTA_NO_ENCONTRADA }
+    Nodo:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        tipo: { type: string, enum: [sucursal, cajero] }
+        nombre: { type: string }
+        responsable: { type: string, nullable: true }
+        efectivo_disponible: { type: number }
+        estado: { type: string, enum: [activo, inactivo] }
+    Cuenta:
+      type: object
+      properties:
+        numero_cuenta: { type: string, example: '6976023998' }
+        nombre_titular: { type: string }
+        saldo: { type: number }
+        estado: { type: string, enum: [activa, bloqueada] }
+    CuentaDetalle:
+      allOf:
+        - $ref: '#/components/schemas/Cuenta'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            nodo_apertura_id: { type: string, format: uuid }
+            created_at: { type: string, format: date-time }
+    Transaccion:
+      type: object
+      properties:
+        id: { type: integer }
+        cuenta_origen: { type: string, nullable: true }
+        cuenta_destino: { type: string, nullable: true }
+        monto: { type: number }
+        tipo: { type: string, enum: [retiro, deposito, transferencia] }
+        nodo_id: { type: string, format: uuid }
+        timestamp: { type: string, format: date-time }
+    Totales:
+      type: object
+      properties:
+        operaciones: { type: integer }
+        monto_total: { type: number }
+        depositos: { type: integer }
+        monto_depositos: { type: number }
+        retiros: { type: integer }
+        monto_retiros: { type: number }
+        transferencias: { type: integer }
+        monto_transferencias: { type: number }
