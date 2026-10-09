@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iniciar sesión · Sucursal</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="login">
+    <h1>Sucursal bancaria</h1>
+    <p class="sub">Acceso para ejecutivos</p>
+
+    <div id="error" class="aviso error" hidden></div>
+
+    <form id="formulario" class="panel">
+      <div class="campo">
+        <label for="usuario">Usuario</label>
+        <input id="usuario" name="usuario" required autofocus autocomplete="username">
+      </div>
+      <div class="campo">
+        <label for="password">Contraseña</label>
+        <input id="password" name="password" type="password" required autocomplete="current-password">
+      </div>
+      <button class="btn" type="submit">Entrar</button>
+    </form>
+  </div>
+
+  <script>
+    const error = document.getElementById('error');
+
+    document.getElementById('formulario').addEventListener('submit', async (evento) => {
+      evento.preventDefault();
+      error.hidden = true;
+
+      const respuesta = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          usuario: document.getElementById('usuario').value,
+          password: document.getElementById('password').value,
+        }),
+      });
+
+      if (respuesta.ok) {
+        location.href = '/';
+        return;
+      }
+
+      error.textContent = (await respuesta.json()).error;
+      error.hidden = false;
+    });
+  </script>
+</body>
+</html>

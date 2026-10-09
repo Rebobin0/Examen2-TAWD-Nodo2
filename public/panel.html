@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sucursal · Sistema bancario</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header class="barra">
+    <div class="barra-int">
+      <div class="logo"><span id="nombre-sucursal">Sucursal</span><small>Servidor administrativo</small></div>
+      <nav class="nav" id="nav">
+        <button data-vista="cuentas" class="activo">Cuentas</button>
+        <button data-vista="historial">Historial</button>
+        <button data-vista="reportes">Reportes</button>
+        <button data-vista="configuracion">Configuración</button>
+      </nav>
+      <div class="usuario">
+        <span id="usuario"></span>
+        <button id="salir" type="button">Salir</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div id="aviso" class="aviso no-imprimir" hidden></div>
+
+    <!-- ===== Cuentas ===== -->
+    <section id="vista-cuentas">
+      <div class="encabezado">
+        <div>
+          <h1>Cuentas de clientes</h1>
+          <p>Las cuentas se crean en el Banco Central; aquí se listan las abiertas en esta sucursal.</p>
+        </div>
+      </div>
+
+      <div class="tarjetas" id="tarjetas-sucursal"></div>
+
+      <form id="form-cuenta" class="panel">
+        <h2>Nueva cuenta</h2>
+        <div class="campos">
+          <div class="campo">
+            <label for="nombre_titular">Nombre del titular</label>
+            <input id="nombre_titular" maxlength="80" required>
+          </div>
+          <div class="campo">
+            <label for="saldo_inicial">Depósito inicial ($)</label>
+            <input id="saldo_inicial" type="number" min="0" step="0.01" value="0" required>
+            <div class="ayuda">Entra como efectivo a la sucursal y queda registrado como depósito.</div>
+          </div>
+        </div>
+        <div class="pie-form">
+          <button class="btn" type="submit">Crear cuenta</button>
+        </div>
+      </form>
+
+      <div class="panel sin-relleno">
+        <h2 id="titulo-cuentas">Cuentas</h2>
+        <div id="tabla-cuentas"></div>
+      </div>
+    </section>
+
+    <!-- ===== Historial ===== -->
+    <section id="vista-historial" hidden>
+      <div class="encabezado">
+        <div>
+          <h1>Historial de transacciones</h1>
+          <p>Local: operaciones hechas en esta sucursal. Por usuario: todos los movimientos de una cuenta.</p>
+        </div>
+        <div class="acciones">
+          <a class="btn sec" id="csv-historial" href="/api/historial.csv">Descargar CSV</a>
+        </div>
+      </div>
+
+      <form id="form-historial" class="panel">
+        <div class="campos">
+          <div class="campo">
+            <label for="h-cuenta">Usuario (cuenta)</label>
+            <select id="h-cuenta">
+              <option value="">Historial local de la sucursal</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label for="h-otra">O escribe un número de cuenta</label>
+            <input id="h-otra" maxlength="20" inputmode="numeric" placeholder="Cuenta de otra sucursal">
+          </div>
+          <div class="campo">
+            <label for="h-desde">Desde</label>
+            <input id="h-desde" type="date">
+          </div>
+          <div class="campo">
+            <label for="h-hasta">Hasta</label>
+            <input id="h-hasta" type="date">
+          </div>
+        </div>
+        <div class="pie-form">
+          <button class="btn" type="submit">Consultar</button>
+          <button class="btn sec" type="reset">Limpiar</button>
+        </div>
+      </form>
+
+      <div class="panel sin-relleno">
+        <h2 id="titulo-historial">Transacciones</h2>
+        <div id="tabla-historial"></div>
+      </div>
+    </section>
+
+    <!-- ===== Reportes ===== -->
+    <section id="vista-reportes" hidden>
+      <div class="encabezado">
+        <div>
+          <h1>Reporte de operaciones</h1>
+          <p id="periodo-reporte"></p>
+          <p class="solo-impresion" id="pie-reporte"></p>
+        </div>
+        <div class="acciones no-imprimir">
+          <a class="btn sec" id="csv-reporte" href="/api/reportes.csv">Descargar CSV</a>
+          <button class="btn" type="button" onclick="window.print()">Imprimir o guardar PDF</button>
+        </div>
+      </div>
+
+      <form id="form-reporte" class="panel no-imprimir">
+        <div class="campos">
+          <div class="campo">
+            <label for="r-desde">Desde</label>
+            <input id="r-desde" type="date" required>
+          </div>
+          <div class="campo">
+            <label for="r-hasta">Hasta</label>
+            <input id="r-hasta" type="date" required>
+          </div>
+        </div>
+        <div class="pie-form">
+          <button class="btn" type="submit">Generar reporte</button>
+        </div>
+      </form>
+
+      <div class="tarjetas" id="tarjetas-reporte"></div>
+
+      <div class="panel sin-relleno">
+        <h2>Operaciones por día</h2>
+        <div id="tabla-reporte"></div>
+      </div>
+    </section>
+
+    <!-- ===== Configuración ===== -->
+    <section id="vista-configuracion" hidden>
+      <div class="encabezado">
+        <div>
+          <h1>Conexión con el Banco Central</h1>
+          <p>La sucursal se identifica con el API Key que genera el administrador del banco.</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Estado</h2>
+        <div id="estado-conexion"></div>
+      </div>
+
+      <form id="form-api-key" class="panel">
+        <h2>API Key de la sucursal</h2>
+        <div class="campo">
+          <label for="api_key">Nuevo API Key</label>
+          <input id="api_key" class="mono" type="password" autocomplete="off" placeholder="bk_suc_…" required>
+          <div class="ayuda">Se verifica contra el Banco Central antes de guardarse. No se vuelve a mostrar.</div>
+        </div>
+        <div class="pie-form">
+          <button class="btn" type="submit">Verificar y guardar</button>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
