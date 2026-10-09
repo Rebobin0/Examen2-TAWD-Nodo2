@@ -1,3 +1,8 @@
 node_modules
 .env
 data/config.json
+
+*:Zone.Identifier
+.claude
+.mcp.json
+boost.json
